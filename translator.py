@@ -19,27 +19,75 @@ OLLAMA_URL   = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "aya-expanse:8b"
 MLX_MODEL    = "mlx-community/aya-expanse-8b-4bit"
 
-SYSTEM_PROMPT = """Ти — професійний перекладач технічної літератури з англійської на українську.
-Перекладаєш книгу "Fundamentals of Software Architecture" Марка Річардса та Ніла Форда.
+SYSTEM_PROMPT = """Ти — перекладач технічної книги. Перекладай текст з англійської на українську.
 
-Правила:
-1. Відповідай ТІЛЬКИ перекладом — без коментарів, без вступних слів
-2. Зберігай Markdown: # ## ### — * ** * `код`
-3. Блоки коду ``` не перекладай — залишай як є
-4. ЗАВЖДИ англійською (не перекладати): API, REST, GraphQL, gRPC, Docker, Kubernetes, CI/CD, DevOps, SOLID, DDD, TDD, ADR, SLA, SQL, NoSQL, AWS, GCP, Azure, software architect, software architecture, software engineering
-5. Не перекладай: власні назви, назви компаній, назви інструментів, акроніми
-6. Перший вжиток архітектурного терміну: українська (english). Приклад: зв'язаність (coupling)
-7. Стиль: академічна українська, чітка і зрозуміла
-8. Зберігай структуру абзаців оригіналу
-9. Числа, URL, email — без змін"""
+СУВОРІ ПРАВИЛА:
+1. Виводь ТІЛЬКИ переклад наданого тексту — нічого більше
+2. НЕ додавай власного контенту: без прикладів, висновків, підсумків, нових розділів
+3. НЕ повторюй оригінал і НЕ показуй двомовний текст
+4. НЕ додавай мітки типу [Переклад українською], [Продовження] або (Продовження тексту...)
+5. Зберігай структуру Markdown: # ## ### * ** `код` — структуру абзаців оригіналу
+6. Блоки коду ``` залишай БЕЗ ЗМІН — не перекладай, не додавай нові ```
+7. НЕ додавай ``` навколо звичайного тексту — лише якщо в оригіналі є ```
+8. Математичні формули — зберігай точно як в оригіналі, не перекладай символи
+9. ЗАЛИШАЙ англійською: API, REST, GraphQL, gRPC, Docker, Kubernetes, CI/CD, DevOps, SOLID, DDD, TDD, ADR, SLA, SQL, NoSQL, AWS, GCP, Azure, software architect, software architecture, software engineering
+10. Не перекладай: власні назви, назви компаній, інструментів, акроніми
+11. Приклади з назвами методів/класів у псевдокоді (add customer, get customer, OrderStrategy тощо) — залишай англійською
+12. Стиль: академічна українська, чітка і зрозуміла
+13. Числа, URL, email — без змін"""
 
 
 # ── Noise filter ─────────────────────────────────────────────────────────────
 
 def _strip_noise(text: str) -> str:
-    """Remove CJK characters and lines that are clearly not Ukrainian/English."""
+    """Remove CJK chars, hashtag spam, and repetition loops."""
     import re
+
+    # Remove CJK character blocks
     text = re.sub(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]+[^\n]*', '', text)
+
+    # Remove meta-annotations the model adds
+    text = re.sub(r'\(Продовження тексту[^)]*\)[^\n]*', '', text)
+    text = re.sub(r'\[Продовження[^\]]*\][^\n]*', '', text)
+
+    # Remove spurious ``` around plain text (keep only if preceded by actual code)
+    # A spurious ``` is a standalone line with just backticks not near code content
+    lines = text.splitlines()
+    cleaned = []
+    for i, line in enumerate(lines):
+        if line.strip() == '```':
+            # Check if neighbors look like code (indented or have code patterns)
+            prev = lines[i-1].strip() if i > 0 else ''
+            nxt = lines[i+1].strip() if i < len(lines)-1 else ''
+            has_code_neighbor = (prev.startswith('    ') or nxt.startswith('    ') or
+                                  re.search(r'[{};=>\(\)]', prev + nxt))
+            if not has_code_neighbor:
+                continue  # skip spurious ```
+        cleaned.append(line)
+    lines = cleaned
+
+    # Cut off at hashtag spam (lines with 3+ hashtags = social media garbage)
+    clean = []
+    for line in lines:
+        hashtag_count = len(re.findall(r'#\w+', line))
+        if hashtag_count >= 3:
+            break  # stop here — everything after is hashtag spam
+        clean.append(line)
+    text = '\n'.join(clean)
+
+    # Detect repetition loop: if the same sentence repeats 3+ times — truncate
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    seen: dict[str, int] = {}
+    result_sentences = []
+    for s in sentences:
+        key = s.strip()[:60]  # first 60 chars as fingerprint
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] >= 3:
+            break
+        result_sentences.append(s)
+    text = ' '.join(result_sentences)
+
+    # Remove lines that are clearly not Ukrainian/English
     lines = text.splitlines()
     clean = [l for l in lines if l.strip() == '' or re.search(r'[а-яіїєґА-ЯІЇЄҐA-Za-z0-9\s\-#*`_.,!?:()\[\]"]', l)]
     return '\n'.join(clean).strip()
@@ -66,6 +114,28 @@ def _fix_english_terms(text: str) -> str:
 
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
+
+def _is_hallucination(source: str, result: str) -> bool:
+    """Detect if model hallucinated (added content, bilingual output, too long)."""
+    import re
+    # Bilingual markers
+    if '[Переклад українською]' in result or '[Продовження тексту' in result:
+        return True
+    if '(Продовження тексту не надається' in result:
+        return True
+    # Hallucinated section headers
+    fake_sections = ['Приклади використання', 'Висновки\n', 'Стратегії подолання',
+                     'Класифікація ', 'Популярні архітектурні', 'Розробка та реалізація архітектури\n',
+                     'Переваги та недоліки\n', 'Практичні поради\n']
+    if any(s in result for s in fake_sections):
+        return True
+    # Output more than 2.5x longer than source → hallucination
+    src_words = len(source.split())
+    out_words = len(result.split())
+    if src_words > 0 and out_words > src_words * 2.5:
+        return True
+    return False
+
 
 def _build_prompt(text: str, prev_context: str = "") -> str:
     context_part = ""
@@ -106,6 +176,7 @@ def _mlx_generate(prompt: str, model_id: str, max_tokens: int = 4096) -> str:
         prompt=prompt,
         max_tokens=max_tokens,
         sampler=sampler,
+        kv_bits=8,          # quantize KV-cache → less memory bandwidth → faster
         verbose=False,
     )
     return _strip_noise(result)
@@ -269,10 +340,16 @@ class Translator:
             return text
         prompt = _build_prompt(text, prev_context)
 
-        if self.backend == "mlx":
-            result = _mlx_generate(prompt, self.model)
-        else:
-            result = _ollama_generate(prompt, self.model)
+        for attempt in range(2):
+            if self.backend == "mlx":
+                result = _mlx_generate(prompt, self.model)
+            else:
+                result = _ollama_generate(prompt, self.model)
+
+            if not _is_hallucination(text, result):
+                break
+            # Second attempt: stricter prompt, no context
+            prompt = _build_prompt(text, "")
 
         result = _fix_english_terms(result)
 
