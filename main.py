@@ -155,6 +155,61 @@ def cmd_info(args: argparse.Namespace) -> None:
     print(f"  Вартість API (якщо Claude): ~${est_cost_usd:.2f} USD")
 
 
+def cmd_export(args: argparse.Namespace) -> None:
+    import shutil
+    import subprocess
+
+    if not shutil.which("pandoc"):
+        print("[помилка] pandoc не встановлено.")
+        print("Встанови: brew install pandoc")
+        sys.exit(1)
+
+    src = Path(args.input)
+    if not src.exists():
+        print(f"[помилка] Файл не знайдено: {src}")
+        sys.exit(1)
+
+    fmt = args.format.lower()
+    if fmt not in ("epub", "pdf"):
+        print("[помилка] Формат має бути epub або pdf")
+        sys.exit(1)
+
+    out = Path(args.output) if args.output else src.with_suffix(f".{fmt}")
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = ["pandoc", str(src), "-o", str(out)]
+
+    if fmt == "epub":
+        cmd += [
+            "--epub-chapter-level=1",
+            "-V", "lang=uk",
+        ]
+        cover = Path("cover.png")
+        if cover.exists():
+            cmd += [f"--epub-cover-image={cover}"]
+
+    elif fmt == "pdf":
+        if not shutil.which("xelatex"):
+            print("[увага] xelatex не знайдено, використовую wkhtmltopdf або pdflatex...")
+        cmd += [
+            "--pdf-engine=xelatex",
+            "-V", "mainfont=Arial",
+            "-V", "lang=uk",
+            "-V", "geometry:margin=2cm",
+        ]
+
+    print(f"Конвертую {src} → {out} ...")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print(f"[помилка] pandoc завершився з кодом {result.returncode}")
+        print(result.stderr)
+        sys.exit(1)
+
+    size_mb = out.stat().st_size / 1024 / 1024
+    print(f"Готово! {out} ({size_mb:.1f} MB)")
+
+
 def cmd_glossary(_args: argparse.Namespace) -> None:
     from glossary import build_glossary_note, TECH_GLOSSARY
     print(f"Глосарій: {len(TECH_GLOSSARY)} технічних термінів\n")
@@ -188,6 +243,12 @@ def main() -> None:
     # --- glossary ---
     sub.add_parser("glossary", help="Показати глосарій")
 
+    # --- export ---
+    p_exp = sub.add_parser("export", help="Конвертувати переклад у EPUB або PDF")
+    p_exp.add_argument("--input", "-i", default="output/book_ua.md", help="Markdown файл (за замовч.: output/book_ua.md)")
+    p_exp.add_argument("--output", "-o", default=None, help="Вихідний файл (за замовч.: поряд з input)")
+    p_exp.add_argument("--format", "-f", default="epub", choices=["epub", "pdf"], help="Формат: epub або pdf (за замовч.: epub)")
+
     args = parser.parse_args()
 
     if args.command == "translate":
@@ -196,6 +257,8 @@ def main() -> None:
         cmd_info(args)
     elif args.command == "glossary":
         cmd_glossary(args)
+    elif args.command == "export":
+        cmd_export(args)
     else:
         parser.print_help()
 
