@@ -1,0 +1,10 @@
+services:
+  viewer:
+    build: ./docker
+    ports:
+      - "3000:80"
+    volumes:
+      - ./output/book_ua.md:/data/book_ua.md:ro
+      - ./progress.json:/data/progress.json:ro
+      - ./output/images:/data/images:ro   # ← зображення з PDF
+    restart: unless-stopped

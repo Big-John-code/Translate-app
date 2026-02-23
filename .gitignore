@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Translation state (large, machine-generated)
+.checkpoint.json
+progress.json
+output/
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/

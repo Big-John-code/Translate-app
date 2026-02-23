@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Основи Архітектури ПЗ — Переклад</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1a1d2e;
+      border-bottom: 1px solid #2d3148;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #a5b4fc;
+    }
+    header span {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    /* ── Progress bar ── */
+    #progress-wrap {
+      background: #1a1d2e;
+      padding: 12px 32px;
+      border-bottom: 1px solid #2d3148;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #progress-bar-outer {
+      flex: 1;
+      height: 6px;
+      background: #2d3148;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #progress-bar-inner {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #a5b4fc);
+      border-radius: 3px;
+      transition: width 2s ease;
+      width: 0%;
+    }
+    #progress-text {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      white-space: nowrap;
+      min-width: 140px;
+    }
+    #status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+    #status-dot.done { background: #6366f1; animation: none; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+    }
+
+    /* ── Markdown content ── */
+    #content h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      margin: 40px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #2d3148;
+    }
+    #content h2 {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #a5b4fc;
+      margin: 32px 0 12px;
+    }
+    #content h3 {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin: 24px 0 10px;
+    }
+    #content p {
+      line-height: 1.8;
+      color: #cbd5e1;
+      margin-bottom: 16px;
+      font-size: 0.97rem;
+    }
+    #content ul, #content ol {
+      padding-left: 24px;
+      margin-bottom: 16px;
+      color: #cbd5e1;
+    }
+    #content li { line-height: 1.8; margin-bottom: 4px; }
+    #content strong { color: #e2e8f0; }
+    #content em { color: #94a3b8; }
+    #content code {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      background: #1e2235;
+      color: #a5b4fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88rem;
+    }
+    #content pre {
+      background: #1e2235;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 20px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    #content pre code {
+      background: none;
+      padding: 0;
+      color: #e2e8f0;
+    }
+    #content blockquote {
+      border-left: 3px solid #6366f1;
+      padding: 4px 16px;
+      margin: 16px 0;
+      color: #94a3b8;
+      font-style: italic;
+    }
+    #content hr {
+      border: none;
+      border-top: 1px solid #2d3148;
+      margin: 40px 0;
+    }
+    #content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    #content th {
+      background: #1e2235;
+      padding: 10px 14px;
+      text-align: left;
+      color: #a5b4fc;
+      border: 1px solid #2d3148;
+    }
+    #content td {
+      padding: 10px 14px;
+      border: 1px solid #2d3148;
+      color: #cbd5e1;
+    }
+    #content tr:nth-child(even) td { background: #141623; }
+
+    /* ── Loading ── */
+    #loading {
+      text-align: center;
+      padding: 80px 0;
+      color: #64748b;
+    }
+    #loading .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #2d3148;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Scroll to top ── */
+    #scroll-top {
+      position: fixed;
+      bottom: 32px; right: 32px;
+      width: 40px; height: 40px;
+      background: #6366f1;
+      border: none;
+      border-radius: 50%;
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+    }
+    #scroll-top.visible { display: flex; }
+    #scroll-top:hover { background: #4f46e5; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📖 Основи Архітектури Програмного Забезпечення</h1>
+  <span>Mark Richards & Neal Ford • O'Reilly 2020</span>
+</header>
+
+<div id="progress-wrap">
+  <div id="status-dot"></div>
+  <div id="progress-bar-outer">
+    <div id="progress-bar-inner"></div>
+  </div>
+  <div id="progress-text">Завантаження...</div>
+</div>
+
+<div class="container">
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Завантажуємо переклад...</p>
+  </div>
+  <div id="content" style="display:none"></div>
+</div>
+
+<button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+  let TOTAL_CHUNKS = 321;
+  let autoRefresh = true;
+
+  // ── Scroll to top button ──
+  window.addEventListener('scroll', () => {
+    document.getElementById('scroll-top').classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // ── Load progress from tiny progress.json ──
+  async function loadProgress() {
+    try {
+      const r = await fetch('/progress.json?t=' + Date.now());
+      if (!r.ok) return null;
+      const d = await r.json();
+      TOTAL_CHUNKS = d.total || TOTAL_CHUNKS;
+      return d.done || 0;
+    } catch { return null; }
+  }
+
+  // ── Load markdown content ──
+  async function loadContent() {
+    const r = await fetch('/book_ua.md?t=' + Date.now());
+    if (!r.ok) throw new Error('Файл не знайдено');
+    return r.text();
+  }
+
+  // ── Update UI ──
+  async function update() {
+    try {
+      const [done, md] = await Promise.all([loadProgress(), loadContent()]);
+      const pct = done ? Math.round(done / TOTAL_CHUNKS * 100) : 0;
+      const isDone = pct >= 100;
+
+      // Progress bar
+      document.getElementById('progress-bar-inner').style.width = pct + '%';
+      document.getElementById('progress-text').textContent =
+        isDone
+          ? `✓ Переклад завершено (${TOTAL_CHUNKS}/${TOTAL_CHUNKS} чанків)`
+          : `Перекладено: ${done || 0} / ${TOTAL_CHUNKS} чанків (${pct}%)`;
+
+      const dot = document.getElementById('status-dot');
+      if (isDone) dot.classList.add('done');
+
+      // Content
+      document.getElementById('loading').style.display = 'none';
+      const el = document.getElementById('content');
+      el.style.display = 'block';
+      el.innerHTML = marked.parse(md);
+
+      // Stop auto-refresh when done
+      if (isDone) autoRefresh = false;
+
+    } catch(e) {
+      document.getElementById('loading').innerHTML =
+        `<p style="color:#ef4444">Помилка: ${e.message}</p>`;
+    }
+  }
+
+  // ── Init ──
+  update();
+  setInterval(() => { if (autoRefresh) update(); }, 15000); // refresh every 15s
+</script>
+</body>
+</html>
