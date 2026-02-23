@@ -68,7 +68,7 @@ def cmd_translate(args: argparse.Namespace) -> None:
 
     # Step 3: Translate
     print("Крок 2/2 — Перекладаємо...")
-    translator = Translator(checkpoint_path=".checkpoint.json")
+    translator = Translator(checkpoint_path=".checkpoint.json", backend=args.backend)
 
     if not args.resume:
         translator.clear_checkpoint()
@@ -235,6 +235,7 @@ def main() -> None:
     p_tr.add_argument("--resume", action="store_true", help="Продовжити з checkpoint")
     p_tr.add_argument("--glossary", action="store_true", help="Зберегти окремий глосарій")
     p_tr.add_argument("--neural-fix", action="store_true", help="Нейронне виправлення термінів після перекладу (повільніше, але точніше)")
+    p_tr.add_argument("--backend", default="mlx", choices=["mlx", "ollama"], help="Бекенд: mlx (швидше, Apple Silicon) або ollama (за замовч.: mlx)")
 
     # --- info ---
     p_info = sub.add_parser("info", help="Інформація про PDF")
