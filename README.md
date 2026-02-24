@@ -1,9 +1,10 @@
 # PDF Book Translator — EN → UA
 
-Перекладає технічну літературу з англійської на українську **локально і безкоштовно**.
-Використовує Ollama (локальний LLM) замість платних API.
+Локальний перекладач технічної PDF-літератури з англійської на українську.
+**Безкоштовно. Без інтернету. Повністю на вашому Mac.**
 
-Оптимізовано для **"Fundamentals of Software Architecture"** (Mark Richards & Neal Ford, O'Reilly 2020).
+Використовує **MLX** (Apple Silicon native) або **Ollama** як LLM-бекенд.
+Модель: `aya-expanse:8b` — навчена на 23 мовах, найкраща якість для української.
 
 ---
 
@@ -12,16 +13,18 @@
 ```
 PDF файл
    ↓
-extractor.py     — витягує текст + зображення (PyMuPDF)
+extractor.py    — витягує текст (H1/H2/paragraph/code) + PNG зображення (PyMuPDF)
    ↓
-translator.py    — перекладає чанками через Ollama (aya-expanse:8b)
-                   → після кожного чанку: checkpoint + запис у файл
+translator.py   — перекладає чанками через MLX або Ollama
+                  • зберігає code-блоки незмінними (placeholder round-trip)
+                  • checkpoint після кожного чанку → безпечний resume
+                  • 40+ технічних термінів залишаються англійськими
    ↓
-postprocess.py   — перший вжиток терміна: "зв'язаність (coupling)"
+postprocess.py  — перший вжиток терміна: "зв'язаність (coupling)"
    ↓
-output/book_ua.md  +  output/images/
+books/{id}/output/book_ua.md  +  images/
    ↓
-Docker (Nginx)   — веб-переглядач на localhost:3000
+API (port 8000) + Docker Nginx (port 3000) — веб-бібліотека
 ```
 
 **Все локально.** Жодного API-ключа, жодного інтернету під час перекладу.
@@ -30,102 +33,120 @@ Docker (Nginx)   — веб-переглядач на localhost:3000
 
 ## Вимоги
 
-- macOS (протестовано на M4)
+- macOS з Apple Silicon (M1/M2/M3/M4) — для MLX бекенду
 - Python 3.11+
-- [Ollama](https://ollama.com) — локальний LLM-сервер
-- Docker Desktop — для веб-переглядача
+- Docker Desktop — для веб-інтерфейсу
+- `pandoc` + WeasyPrint — для експорту в EPUB/PDF
+
+---
+
+## Перший запуск після клонування
+
+```bash
+# registry.json не в репо — стартуємо з порожнього
+cp registry.example.json registry.json
+```
+
+> `registry.json` ігнорується `.gitignore` — він зберігає ваш особистий список книг
+> і не повинен потрапляти до репозиторію.
 
 ---
 
 ## Встановлення
 
 ```bash
-# 1. Встановити Ollama
-brew install ollama
-brew services start ollama
-
-# 2. Завантажити модель (~5GB, один раз)
-ollama pull aya-expanse:8b
-
-# 3. Встановити залежності Python
-cd /Users/ivantsymbrak/Code/LibreTranslate
+# 1. Клонуємо та встановлюємо залежності Python
+git clone <repo>
+cd LibreTranslate
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# 2. Встановити системні залежності
+brew install pandoc
+brew install pango          # для WeasyPrint (PDF export)
+
+# 3. (Опціонально) Ollama-бекенд замість MLX
+brew install ollama
+brew services start ollama
+ollama pull aya-expanse:8b
 ```
 
 ---
 
-## Запуск веб-переглядача
+## Запуск
+
+### Веб-інтерфейс (рекомендовано)
 
 ```bash
+# Термінал 1 — FastAPI бекенд
+.venv/bin/uvicorn api:app --host 0.0.0.0 --port 8000
+
+# Термінал 2 — Docker nginx (веб-переглядач)
 docker compose up -d
+
 # Відкрити: http://localhost:3000
 ```
 
-Сайт автоматично оновлюється кожні 15 секунд — видно прогрес перекладу в реальному часі.
+У веб-інтерфейсі можна:
+- Завантажити PDF (drag & drop), вказати назву і скільки сторінок пропустити
+- Спостерігати прогрес у реальному часі (оновлюється кожні 15 секунд)
+- Читати переклад прямо у браузері (з відображенням зображень)
+- Завантажити готову книгу у форматі **EPUB** або **PDF**
+- Переглядати лог перекладу
+- Зупинити переклад (прогрес збережено, можна продовжити або почати знову)
+- Видалити книгу (зупиняє процес і очищує файли)
+
+### CLI (без Docker)
+
+```bash
+# Перекласти книгу
+nohup .venv/bin/python main.py translate \
+  --input /path/to/book.pdf \
+  --output output/book_ua.md \
+  --from-page 21 \
+  --chunk-words 400 \
+  --backend mlx \
+  --title "Назва книги" \
+  > output/translation.log 2>&1 &
+
+# Слідкувати за прогресом
+tail -f output/translation.log
+
+# Продовжити після перерви (checkpoint зберігається автоматично)
+.venv/bin/python main.py translate \
+  --input /path/to/book.pdf \
+  --output output/book_ua.md \
+  --from-page 21 --resume
+
+# Перевірити PDF перед перекладом
+.venv/bin/python main.py info --input /path/to/book.pdf
+
+# Переглянути глосарій
+.venv/bin/python main.py glossary
+
+# Експортувати в EPUB або PDF
+.venv/bin/python main.py export --input output/book_ua.md --format epub
+.venv/bin/python main.py export --input output/book_ua.md --format pdf
+```
 
 ---
 
-## Використання
+## Параметри `translate`
 
-### Перевірити PDF
-
-```bash
-python main.py info --input ../fundamentalsofsoftwarearchitecture.pdf
-```
-
-### Перекласти всю книгу
-
-```bash
-nohup .venv/bin/python main.py translate \
-  --input ../fundamentalsofsoftwarearchitecture.pdf \
-  --output output/book_ua.md \
-  --from-page 21 \
-  --chunk-words 400 \
-  --glossary \
-  > output/translation.log 2>&1 &
-```
-
-> `--from-page 21` — пропускає обкладинку і зміст, починає з Розділу 1.
-
-### З нейронним виправленням термінів (точніше, але ~2x повільніше)
-
-```bash
-nohup .venv/bin/python main.py translate \
-  --input ../fundamentalsofsoftwarearchitecture.pdf \
-  --output output/book_ua.md \
-  --from-page 21 \
-  --chunk-words 400 \
-  --glossary \
-  --neural-fix \
-  > output/translation.log 2>&1 &
-```
-
-`--neural-fix` запускає другий LLM-прохід після кожного чанку: модель порівнює оригінал і переклад, знаходить технічні терміни (CamelCase, абревіатури, назви бібліотек), які були перекладені, і відновлює їх англійською — автоматично, без ручного списку.
-
-### Продовжити після перерви
-
-```bash
-.venv/bin/python main.py translate \
-  --input ../fundamentalsofsoftwarearchitecture.pdf \
-  --output output/book_ua.md \
-  --from-page 21 \
-  --resume
-```
-
-### Стежити за прогресом
-
-```bash
-tail -f output/translation.log
-cat progress.json   # {"done": 42, "total": 321}
-```
-
-### Переглянути глосарій
-
-```bash
-python main.py glossary
-```
+| Параметр | За замовч. | Опис |
+|---|---|---|
+| `--input` | — | Шлях до PDF (обов'язково) |
+| `--output` | `output/book_ua.md` | Вихідний Markdown файл |
+| `--from-page` | 1 | Пропустити N сторінок (обкладинка, зміст) |
+| `--to-page` | остання | Зупинитись на сторінці N |
+| `--chunk-words` | 600 | Розмір чанку в словах |
+| `--backend` | `mlx` | `mlx` (Apple Silicon) або `ollama` |
+| `--title` | ім'я файлу | Назва книги для заголовку |
+| `--checkpoint` | `<output>/.checkpoint.json` | Файл чекпоінту |
+| `--resume` | false | Продовжити з чекпоінту |
+| `--neural-fix` | false | Другий LLM-прохід для термінів (~2x повільніше) |
+| `--glossary` | false | Зберегти окремий файл глосарію |
 
 ---
 
@@ -133,66 +154,88 @@ python main.py glossary
 
 ```
 LibreTranslate/
-├── main.py            ← CLI: команди translate / info / glossary
-├── extractor.py       ← PyMuPDF: витягує текст + зображення з PDF
-├── translator.py      ← Ollama API, checkpoint/resume, neural-fix
-├── glossary.py        ← 77 архітектурних термінів EN→UA
-├── postprocess.py     ← Анотує перший вжиток: "термін (term)"
+├── api.py              ← FastAPI бекенд (port 8000)
+│                          GET/POST/DELETE /api/books
+│                          POST /api/books/{id}/stop
+│                          POST /api/books/{id}/restart
+│                          GET  /api/books/{id}/export?format=epub|pdf
+│                          GET  /api/books/{id}/log
+├── main.py             ← CLI: translate / info / glossary / export
+├── extractor.py        ← PyMuPDF: блоки тексту + PNG зображень
+├── translator.py       ← MLX/Ollama, checkpoint, code preservation, terms
+├── glossary.py         ← 77 EN→UA термінів + список KEEP_AS_IS
+├── postprocess.py      ← Анотація першого вжитку термінів
 ├── requirements.txt
+├── registry.json       ← Реєстр книг для веб-інтерфейсу
 ├── docker-compose.yml
 ├── docker/
 │   ├── Dockerfile
-│   ├── nginx.conf
-│   └── index.html     ← веб-переглядач (marked.js + auto-refresh)
-├── .checkpoint.json   ← прогрес перекладу (автоматично)
-├── progress.json      ← {"done": N, "total": 321} для UI
-└── output/
-    ├── book_ua.md     ← готовий переклад
-    ├── images/        ← зображення з PDF (PNG)
-    └── translation.log
+│   ├── nginx.conf      ← /api/ → host:8000, /data/ → файли книг
+│   └── index.html      ← SPA: бібліотека + рідер
+└── books/              ← Книги завантажені через веб-інтерфейс
+    └── {book_id}/
+        ├── book.pdf
+        └── output/
+            ├── book_ua.md
+            ├── progress.json
+            ├── .checkpoint.json
+            ├── translation.log
+            └── images/
 ```
 
 ---
 
-## Компоненти
+## Як влаштований переклад
 
-| Файл | Що робить |
-|------|-----------|
-| `extractor.py` | Читає PDF, класифікує блоки (H1/H2/paragraph/code/caption/image), рендерить зображення як PNG |
-| `translator.py` | Надсилає чанки до Ollama, зберігає checkpoint після кожного, фільтрує CJK-символи, виправляє англійські терміни |
-| `glossary.py` | `KEEP_AS_IS` — терміни що залишаються англійськими; `TECH_GLOSSARY` — словник EN→UA |
-| `postprocess.py` | Пробігає готовий текст, при першому вживанні додає оригінал: `зв'язаність (coupling)` |
-| `main.py` | Склеює все разом, CLI інтерфейс |
+### Code-блоки
+Перед відправкою чанку до моделі всі ` ``` ``` ` блоки замінюються на плейсхолдери `«CODE_BLOCK_N»` і відновлюються після перекладу — код ніколи не йде до LLM.
+
+### Зображення
+Витягуються через PyMuPDF при DPI=150 і зберігаються в `images/`.
+Позиція кожного зображення (відносна в межах чанку) фіксується і при записі Markdown вони вставляються між абзацами пропорційно їх позиції в PDF.
+
+### Checkpoint / Resume
+Після кожного чанку: `{"chunks": {"0": "...", "1": "..."}, "last_chunk": 5}`.
+`progress.json` — легкий файл `{"done": 5, "total": 321}` тільки для UI.
+`--resume` пропускає вже перекладені чанки.
+
+### Технічні терміни
+40+ патернів в `_FORCE_ENGLISH`: `API`, `Docker`, `CI/CD`, `microservices`, `REST`, `GraphQL`, `DevOps` та ін. — ніколи не перекладаються.
+`_fix_english_terms()` — regex post-process після кожного чанку.
+`--neural-fix` — другий LLM-виклик для автоматичного пошуку термінів що "протекли" у переклад.
 
 ---
 
 ## Модель
 
 **aya-expanse:8b** (Cohere) — найкраща безкоштовна модель для перекладу на українську:
-- Навчена на 23 мовах з рівним балансом
-- Не "витікає" в інші мови (на відміну від китайських моделей як qwen)
-- Потребує ~6GB RAM, комфортно працює на M4 16GB
+- Навчена рівномірно на 23 мовах, включно з українською
+- Не "витікає" в інші мови (на відміну від qwen та інших китайських моделей)
+- MLX (4-bit quant): `mlx-community/aya-expanse-8b-4bit` — ~6 GB, нативно на Apple Silicon
+- Ollama: `aya-expanse:8b` — ~6 GB
 
 ---
 
-## Checkpoint / Resume
+## Експорт
 
-Після кожного перекладеного чанку стан зберігається в `.checkpoint.json`.
-При перезапуску з `--resume` переклад продовжується з місця зупинки.
-
-Щоб почати заново (скинути без видалення файлів — важливо для Docker):
+Підтримується через `pandoc` + WeasyPrint:
 
 ```bash
-echo '{"chunks":{},"last_chunk":-1}' > .checkpoint.json
-echo "" > output/book_ua.md
-echo '{"done":0,"total":321}' > progress.json
+# Через CLI
+.venv/bin/python main.py export --input output/book_ua.md --format epub
+.venv/bin/python main.py export --input output/book_ua.md --format pdf
+
+# Або через кнопки ⬇ EPUB / ⬇ PDF у веб-інтерфейсі
 ```
+
+EPUB — рекомендований формат: зберігає структуру глав, зображення, невеликий розмір (~1–15 MB).
+PDF — генерується через WeasyPrint (потребує `brew install pango`).
 
 ---
 
-## Правила перекладу
+## Важливо для Docker / macOS VirtioFS
 
-Терміни, що **завжди залишаються англійською**: `software architect`, `software architecture`,
-`software engineering`, `API`, `REST`, `GraphQL`, `Docker`, `Kubernetes`, `CI/CD`, `DevOps` та ін.
-
-Перший вжиток архітектурного терміна: `зв'язаність (coupling)`, `зчепленість (cohesion)` тощо.
+Docker Desktop на macOS кешує inode bind-mount.
+- **Ніколи не видаляти** файли що монтуються в Docker — тільки перезаписувати
+- `_write_output()` використовує `os.fsync()` щоб VirtioFS бачило зміни одразу
+- Якщо Docker не бачить оновлень: `docker compose restart viewer`

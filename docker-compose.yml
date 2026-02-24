@@ -4,7 +4,9 @@ services:
     ports:
       - "3000:80"
     volumes:
-      - ./output/book_ua.md:/data/book_ua.md:ro
-      - ./progress.json:/data/progress.json:ro
-      - ./output/images:/data/images:ro   # ← зображення з PDF
+      - ./output:/data/output:ro
+      - ./output_react:/data/output_react:ro
+      - ./books:/data/books:ro
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

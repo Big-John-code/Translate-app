@@ -50,13 +50,16 @@ def _strip_noise(text: str) -> str:
     text = re.sub(r'\(Продовження тексту[^)]*\)[^\n]*', '', text)
     text = re.sub(r'\[Продовження[^\]]*\][^\n]*', '', text)
 
-    # Remove spurious ``` around plain text (keep only if preceded by actual code)
-    # A spurious ``` is a standalone line with just backticks not near code content
+    # Remove ``` that appears AFTER text on the same line — model artifact
+    # e.g. "...основної системи. ```" → "...основної системи."
+    # This prevents spurious code blocks that swallow subsequent image tags
+    text = re.sub(r'([а-яіїєґА-ЯІЇЄҐA-Za-z0-9.,!?:;\)\"\'])\s*`{3}', r'\1', text)
+
+    # Remove spurious standalone ``` not adjacent to actual code content
     lines = text.splitlines()
     cleaned = []
     for i, line in enumerate(lines):
         if line.strip() == '```':
-            # Check if neighbors look like code (indented or have code patterns)
             prev = lines[i-1].strip() if i > 0 else ''
             nxt = lines[i+1].strip() if i < len(lines)-1 else ''
             has_code_neighbor = (prev.startswith('    ') or nxt.startswith('    ') or
@@ -65,6 +68,12 @@ def _strip_noise(text: str) -> str:
                 continue  # skip spurious ```
         cleaned.append(line)
     lines = cleaned
+
+    # Fix unclosed code blocks: if odd number of ``` fences, close the last one
+    fence_count = sum(1 for l in lines if l.strip() == '```' or
+                      (l.strip().startswith('```') and len(l.strip()) <= 20))
+    if fence_count % 2 != 0:
+        lines.append('```')
 
     # Cut off at hashtag spam (lines with 3+ hashtags = social media garbage)
     clean = []
@@ -93,16 +102,90 @@ def _strip_noise(text: str) -> str:
     return '\n'.join(clean).strip()
 
 
+# ── Code block placeholder helpers ────────────────────────────────────────────
+
+import re as _re
+
+_CODE_FENCE_RE = _re.compile(r'(```[\w]*\n[\s\S]*?```)', _re.MULTILINE)
+
+
+def _extract_code_blocks(text: str) -> tuple[str, list[str]]:
+    """Replace fenced code blocks with «CODE_BLOCK_N» placeholders.
+    Returns (sanitized_text, list_of_original_blocks).
+    """
+    blocks: list[str] = []
+
+    def replacer(m: _re.Match) -> str:
+        blocks.append(m.group(0))
+        return f'«CODE_BLOCK_{len(blocks) - 1}»'
+
+    return _CODE_FENCE_RE.sub(replacer, text), blocks
+
+
+def _restore_code_blocks(text: str, blocks: list[str]) -> str:
+    """Restore code blocks; handle model wrapping placeholder in backticks/quotes."""
+    for idx, block in enumerate(blocks):
+        token = f'«CODE_BLOCK_{idx}»'
+        text = _re.sub(r'`*["\']?' + _re.escape(token) + r'["\']?`*', block, text)
+        # Fallback: token without guillemets (model dropped them)
+        if token not in text and f'CODE_BLOCK_{idx}' in text:
+            text = _re.sub(r'`*CODE_BLOCK_' + str(idx) + r'`*', block, text)
+    return text
+
+
 # ── Force English terms ───────────────────────────────────────────────────────
 
 _FORCE_ENGLISH: list[tuple[str, str]] = [
-    (r'архітектор[аиуові]?\s+програмного\s+забезпечення', 'software architect'),
-    (r'архітектор[аиуові]?\s+програмне\s+забезпечення',  'software architect'),
-    (r'архітектур[аиуові]+\s+програмного\s+забезпечення', 'software architecture'),
-    (r'програмн[аиоу]+\s+архітектур[аиуові]*',           'software architecture'),
-    (r'програмн[аиоу]+\s+архітектор[аиуові]*',           'software architect'),
-    (r'інженерія\s+програмного\s+забезпечення',           'software engineering'),
-    (r'розробк[аи]\s+програмного\s+забезпечення',         'software development'),
+    # Software architect / architecture / engineering
+    (r'архітектор[аиуові]?\s+програмного\s+забезпечення',    'software architect'),
+    (r'архітектор[аиуові]?\s+програмне\s+забезпечення',      'software architect'),
+    (r'архітектур[аиуові]+\s+програмного\s+забезпечення',    'software architecture'),
+    (r'програмн[аиоу]+\s+архітектур[аиуові]*',               'software architecture'),
+    (r'програмн[аиоу]+\s+архітектор[аиуові]*',               'software architect'),
+    (r'інженерія\s+програмного\s+забезпечення',               'software engineering'),
+    (r'розробк[аи]\s+програмного\s+забезпечення',             'software development'),
+    # Infrastructure & DevOps
+    (r'безперервн[аіе]\s+інтеграці[яї]',                      'CI'),
+    (r'безперервн[аіе]\s+постачанн[яі]',                      'CD'),
+    (r'безперервн[аіе]\s+розгортанн[яі]',                     'CD'),
+    (r'дев\s*опс',                                             'DevOps'),
+    (r'докер(?!\w)',                                           'Docker'),
+    (r'кубернетес',                                            'Kubernetes'),
+    (r'кубернетс(?!\w)',                                       'Kubernetes'),
+    (r'гіт\s*хаб',                                            'GitHub'),
+    (r'гітхаб',                                               'GitHub'),
+    (r'гіт\s*лаб',                                            'GitLab'),
+    (r'гітлаб',                                               'GitLab'),
+    # API & protocols
+    (r'програмний\s+інтерфейс\s+застосунку',                  'API'),
+    (r'прикладний\s+програмний\s+інтерфейс',                  'API'),
+    (r'інтерфейс\s+програмування\s+застосунків',              'API'),
+    (r'передача\s+репрезентативного\s+стану',                  'REST'),
+    (r'репрезентативна\s+передача\s+стану',                   'REST'),
+    (r'граф\s*ql',                                             'GraphQL'),
+    (r'г-?рпц',                                               'gRPC'),
+    # Cloud providers
+    (r'амазон\s+веб[\s-]сервіси',                             'AWS'),
+    (r'гугл\s+хмарна\s+платформа',                            'GCP'),
+    (r'гугл\s+клауд',                                         'Google Cloud'),
+    (r'майкрософт\s+азур',                                    'Azure'),
+    (r'мікрософт\s+азур',                                     'Azure'),
+    # Architecture patterns
+    (r'мікросервісн[аиу]+\s+архітектур[аиуові]*',            'microservices architecture'),
+    (r'мікросервіс[аиуові]*(?!\s+архітектур)',                'microservices'),
+    (r'монолітн[аиу]+\s+архітектур[аиуові]*',                'monolithic architecture'),
+    (r'подієво[\s-]керован[аиу]+\s+архітектур[аиуові]*',     'event-driven architecture'),
+    (r'подієво[\s-]керован[аиу]+',                            'event-driven'),
+    # Databases
+    (r'структурована\s+мова\s+запитів',                       'SQL'),
+    (r'нереляційн[аиу]+\s+баз[аи]\s+даних',                  'NoSQL database'),
+    # Testing & methodologies
+    (r'розробка\s+(?:через|на\s+основі)\s+тестування',       'TDD'),
+    (r'тест[\s-]орієнтована\s+розробка',                      'TDD'),
+    (r'предметно[\s-]орієнтоване\s+проєктування',             'DDD'),
+    (r'гнучк[аиу]+\s+методологі[яї]',                        'Agile'),
+    (r'гнучк[аиу]+\s+розробк[аи]',                           'Agile development'),
+    (r'скрам(?!\w)',                                           'Scrum'),
 ]
 
 
@@ -290,10 +373,10 @@ def _load_checkpoint(path: Path) -> dict:
     return {"chunks": {}, "last_chunk": -1}
 
 
-def _save_checkpoint(path: Path, state: dict) -> None:
+def _save_checkpoint(path: Path, state: dict, total: int = 0) -> None:
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     progress_path = path.parent / "progress.json"
-    progress = {"done": state["last_chunk"] + 1, "total": 321}
+    progress = {"done": state["last_chunk"] + 1, "total": total or state.get("total", 0)}
     progress_path.write_text(json.dumps(progress), encoding="utf-8")
 
 
@@ -379,7 +462,16 @@ class Translator:
     def translate_chunk(self, text: str, prev_context: str = "", neural_fix: bool = False) -> str:
         if not text.strip():
             return text
-        prompt = _build_prompt(text, prev_context)
+
+        # Extract code blocks — send only prose to the model
+        sanitized, code_blocks = _extract_code_blocks(text)
+
+        # Skip LLM entirely if there is no prose to translate
+        prose_only = _re.sub(r'«CODE_BLOCK_\d+»', '', sanitized).strip()
+        if not prose_only:
+            return text  # return original verbatim
+
+        prompt = _build_prompt(sanitized, prev_context)
 
         for attempt in range(2):
             if self.backend == "mlx":
@@ -387,11 +479,13 @@ class Translator:
             else:
                 result = _ollama_generate(prompt, self.model)
 
-            if not _is_hallucination(text, result):
+            if not _is_hallucination(sanitized, result):
                 break
             # Second attempt: stricter prompt, no context
-            prompt = _build_prompt(text, "")
+            prompt = _build_prompt(sanitized, "")
 
+        # Restore code blocks verbatim before any post-processing
+        result = _restore_code_blocks(result, code_blocks)
         result = _fix_english_terms(result)
 
         if neural_fix:
@@ -443,7 +537,7 @@ class Translator:
 
                 state["chunks"][str(i)] = translated
                 state["last_chunk"] = i
-                _save_checkpoint(self.checkpoint_path, state)
+                _save_checkpoint(self.checkpoint_path, state, total=total)
                 _write_output(out, results, i)
 
                 remaining = total - i - 1

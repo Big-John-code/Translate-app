@@ -3,299 +3,516 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Основи Архітектури ПЗ — Переклад</title>
+  <title>📚 Перекладач книг</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0f1117; --surface:#1a1d2e; --border:#2d3148; --accent:#6366f1;
+      --accent2:#a5b4fc; --text:#e2e8f0; --muted:#64748b; --subtle:#94a3b8;
+      --danger:#ef4444; --green:#22c55e; --yellow:#fbbf24;
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    button { cursor:pointer; font-family:inherit; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
-      min-height: 100vh;
-    }
+    /* ── HEADER ── */
+    .header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 28px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:200; gap:12px; }
+    .header-left { display:flex; align-items:center; gap:10px; }
+    .header-title { font-size:1rem; font-weight:600; color:var(--accent2); }
+    .back-btn { background:none; border:1px solid var(--border); color:var(--subtle); padding:6px 12px; border-radius:6px; font-size:.85rem; transition:all .2s; }
+    .back-btn:hover { border-color:var(--accent); color:var(--accent2); }
+    .add-btn { background:var(--accent); color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:.88rem; font-weight:600; transition:background .2s; }
+    .add-btn:hover { background:#4f46e5; }
 
-    /* ── Header ── */
-    header {
-      background: #1a1d2e;
-      border-bottom: 1px solid #2d3148;
-      padding: 16px 32px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    header h1 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #a5b4fc;
-    }
-    header span {
-      font-size: 0.8rem;
-      color: #64748b;
-    }
+    /* ── LIBRARY ── */
+    #library-view { padding:32px 28px; max-width:1100px; margin:0 auto; }
+    .section-title { font-size:.75rem; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:18px; }
+    .books-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:18px; }
 
-    /* ── Progress bar ── */
-    #progress-wrap {
-      background: #1a1d2e;
-      padding: 12px 32px;
-      border-bottom: 1px solid #2d3148;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    #progress-bar-outer {
-      flex: 1;
-      height: 6px;
-      background: #2d3148;
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    #progress-bar-inner {
-      height: 100%;
-      background: linear-gradient(90deg, #6366f1, #a5b4fc);
-      border-radius: 3px;
-      transition: width 2s ease;
-      width: 0%;
-    }
-    #progress-text {
-      font-size: 0.78rem;
-      color: #94a3b8;
-      white-space: nowrap;
-      min-width: 140px;
-    }
-    #status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: #22c55e;
-      animation: pulse 2s infinite;
-      flex-shrink: 0;
-    }
-    #status-dot.done { background: #6366f1; animation: none; }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
+    /* ── CARD ── */
+    .book-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:14px; transition:border-color .2s; }
+    .book-card:hover { border-color:#3d4168; }
+    .book-card.running-card { border-color:rgba(34,197,94,.3); animation:card-pulse 3s ease-in-out infinite; }
+    @keyframes card-pulse { 0%,100%{border-color:rgba(34,197,94,.2)} 50%{border-color:rgba(34,197,94,.5)} }
+    .book-card-title { font-size:.97rem; font-weight:600; color:var(--text); line-height:1.4; }
+    .book-card-meta { font-size:.78rem; color:var(--muted); margin-top:5px; }
 
-    /* ── Layout ── */
-    .container {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 40px 32px 80px;
-    }
+    .status-badge { display:inline-flex; align-items:center; gap:6px; font-size:.75rem; font-weight:600; padding:3px 10px; border-radius:100px; }
+    .status-badge.done    { background:rgba(99,102,241,.15); color:var(--accent2); }
+    .status-badge.running { background:rgba(34,197,94,.12);  color:var(--green); }
+    .status-badge.idle    { background:rgba(100,116,139,.15); color:var(--muted); }
+    .status-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .status-badge.running .status-dot { animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
-    /* ── Markdown content ── */
-    #content h1 {
-      font-size: 1.8rem;
-      font-weight: 700;
-      color: #e2e8f0;
-      margin: 40px 0 16px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #2d3148;
-    }
-    #content h2 {
-      font-size: 1.3rem;
-      font-weight: 600;
-      color: #a5b4fc;
-      margin: 32px 0 12px;
-    }
-    #content h3 {
-      font-size: 1.1rem;
-      color: #94a3b8;
-      margin: 24px 0 10px;
-    }
-    #content p {
-      line-height: 1.8;
-      color: #cbd5e1;
-      margin-bottom: 16px;
-      font-size: 0.97rem;
-    }
-    #content ul, #content ol {
-      padding-left: 24px;
-      margin-bottom: 16px;
-      color: #cbd5e1;
-    }
-    #content li { line-height: 1.8; margin-bottom: 4px; }
-    #content strong { color: #e2e8f0; }
-    #content em { color: #94a3b8; }
-    #content code {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      background: #1e2235;
-      color: #a5b4fc;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.88rem;
-    }
-    #content pre {
-      background: #1e2235;
-      border: 1px solid #2d3148;
-      border-radius: 8px;
-      padding: 20px;
-      overflow-x: auto;
-      margin: 16px 0;
-    }
-    #content pre code {
-      background: none;
-      padding: 0;
-      color: #e2e8f0;
-    }
-    #content blockquote {
-      border-left: 3px solid #6366f1;
-      padding: 4px 16px;
-      margin: 16px 0;
-      color: #94a3b8;
-      font-style: italic;
-    }
-    #content hr {
-      border: none;
-      border-top: 1px solid #2d3148;
-      margin: 40px 0;
-    }
-    #content table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0;
-      font-size: 0.9rem;
-    }
-    #content th {
-      background: #1e2235;
-      padding: 10px 14px;
-      text-align: left;
-      color: #a5b4fc;
-      border: 1px solid #2d3148;
-    }
-    #content td {
-      padding: 10px 14px;
-      border: 1px solid #2d3148;
-      color: #cbd5e1;
-    }
-    #content tr:nth-child(even) td { background: #141623; }
+    .progress-wrap { display:flex; flex-direction:column; gap:5px; }
+    .progress-track { height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .progress-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:2px; transition:width 1s; }
+    .progress-label { font-size:.72rem; color:var(--muted); }
 
-    /* ── Loading ── */
-    #loading {
-      text-align: center;
-      padding: 80px 0;
-      color: #64748b;
-    }
-    #loading .spinner {
-      width: 32px; height: 32px;
-      border: 3px solid #2d3148;
-      border-top-color: #6366f1;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 16px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* ── CARD ACTIONS ── */
+    .card-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+    .btn-read { flex:1; background:rgba(99,102,241,.12); color:var(--accent2); border:1px solid rgba(99,102,241,.3); border-radius:7px; padding:7px 0; font-size:.82rem; font-weight:600; transition:all .2s; min-width:80px; }
+    .btn-read:hover { background:rgba(99,102,241,.25); }
+    .btn-read:disabled { opacity:.4; cursor:not-allowed; }
+    .btn-download { background:rgba(34,197,94,.08); color:#4ade80; border:1px solid rgba(34,197,94,.25); border-radius:7px; padding:7px 10px; font-size:.78rem; font-weight:600; transition:all .2s; }
+    .btn-download:hover { background:rgba(34,197,94,.2); }
+    .btn-download:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-log { background:rgba(251,191,36,.08); color:var(--yellow); border:1px solid rgba(251,191,36,.2); border-radius:7px; padding:7px 10px; font-size:.82rem; transition:all .2s; }
+    .btn-log:hover { background:rgba(251,191,36,.2); }
+    .btn-stop    { background:rgba(239,68,68,.1);  color:#f87171; border:1px solid rgba(239,68,68,.3);  border-radius:7px; padding:7px 10px; font-size:.82rem; font-weight:600; transition:all .2s; }
+    .btn-stop:hover { background:rgba(239,68,68,.25); }
+    .btn-restart { background:rgba(251,191,36,.08); color:#fcd34d; border:1px solid rgba(251,191,36,.25); border-radius:7px; padding:7px 10px; font-size:.82rem; font-weight:600; transition:all .2s; }
+    .btn-restart:hover { background:rgba(251,191,36,.2); }
+    .btn-delete { background:rgba(100,116,139,.08); color:var(--muted); border:1px solid rgba(100,116,139,.2); border-radius:7px; padding:7px 10px; font-size:.82rem; transition:all .2s; }
+    .btn-delete:hover { background:rgba(239,68,68,.15); color:#f87171; border-color:rgba(239,68,68,.3); }
 
-    /* ── Scroll to top ── */
-    #scroll-top {
-      position: fixed;
-      bottom: 32px; right: 32px;
-      width: 40px; height: 40px;
-      background: #6366f1;
-      border: none;
-      border-radius: 50%;
-      color: white;
-      cursor: pointer;
-      font-size: 18px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
-    }
-    #scroll-top.visible { display: flex; }
-    #scroll-top:hover { background: #4f46e5; }
+    .empty-state { text-align:center; padding:80px 20px; color:var(--muted); }
+    .empty-state p { margin-top:12px; font-size:.9rem; }
+
+    /* ── READER ── */
+    #reader-view { display:none; }
+    .reader-progress { background:var(--surface); border-bottom:1px solid var(--border); padding:10px 28px; display:flex; align-items:center; gap:14px; }
+    .reader-progress-bar { flex:1; height:4px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .reader-progress-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); border-radius:2px; transition:width 2s; }
+    .reader-progress-text { font-size:.75rem; color:var(--subtle); white-space:nowrap; }
+    .reader-body { max-width:860px; margin:0 auto; padding:40px 28px 100px; }
+    .reader-banner { background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); border-radius:8px; padding:10px 16px; margin-bottom:20px; font-size:.83rem; color:#4ade80; display:none; }
+
+    #reader-content h1 { font-size:1.8rem;font-weight:700;color:var(--text);margin:40px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--border); }
+    #reader-content h2 { font-size:1.3rem;font-weight:600;color:var(--accent2);margin:32px 0 12px; }
+    #reader-content h3 { font-size:1.1rem;color:var(--subtle);margin:24px 0 10px; }
+    #reader-content p  { line-height:1.8;color:#cbd5e1;margin-bottom:16px;font-size:.97rem; }
+    #reader-content ul,#reader-content ol { padding-left:24px;margin-bottom:16px;color:#cbd5e1; }
+    #reader-content li { line-height:1.8;margin-bottom:4px; }
+    #reader-content strong { color:var(--text); }
+    #reader-content em { color:var(--subtle); }
+    #reader-content code { font-family:'JetBrains Mono','Fira Code',monospace;background:#1e2235;color:var(--accent2);padding:2px 6px;border-radius:4px;font-size:.87rem; }
+    #reader-content pre { background:#1e2235;border:1px solid var(--border);border-radius:8px;padding:20px;overflow-x:auto;margin:16px 0; }
+    #reader-content pre code { background:none;padding:0;color:var(--text); }
+    #reader-content blockquote { border-left:3px solid var(--accent);padding:4px 16px;margin:16px 0;color:var(--subtle);font-style:italic; }
+    #reader-content hr { border:none;border-top:1px solid var(--border);margin:40px 0; }
+    #reader-content img { max-width:100%;border-radius:6px;margin:16px 0;display:block; }
+    #reader-content table { width:100%;border-collapse:collapse;margin:16px 0;font-size:.9rem; }
+    #reader-content th { background:#1e2235;padding:10px 14px;text-align:left;color:var(--accent2);border:1px solid var(--border); }
+    #reader-content td { padding:10px 14px;border:1px solid var(--border);color:#cbd5e1; }
+    #reader-content tr:nth-child(even) td { background:#141623; }
+
+    #scroll-top { position:fixed;bottom:28px;right:28px;width:40px;height:40px;background:var(--accent);border:none;border-radius:50%;color:#fff;font-size:18px;display:none;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(99,102,241,.4); }
+    #scroll-top.visible { display:flex; }
+    #scroll-top:hover { background:#4f46e5; }
+
+    /* ── MODAL BASE ── */
+    .modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:20px;max-width:95vw; }
+
+    .modal-title { font-size:1.1rem;font-weight:700;color:var(--text); }
+    .field { display:flex;flex-direction:column;gap:6px; }
+    .field label { font-size:.8rem;font-weight:600;color:var(--subtle); }
+    .field input[type="text"],.field input[type="number"] { background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:.9rem;outline:none;transition:border-color .2s; }
+    .field input:focus { border-color:var(--accent); }
+    .field input::placeholder { color:var(--muted); }
+
+    .file-drop { border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s; }
+    .file-drop:hover,.file-drop.dragover { border-color:var(--accent);background:rgba(99,102,241,.05); }
+    .file-drop p { color:var(--muted);font-size:.88rem;margin-top:6px; }
+    .file-name { font-size:.82rem;color:var(--accent2);margin-top:8px;font-weight:600; }
+
+    .upload-progress { display:none;flex-direction:column;gap:6px; }
+    .upload-progress.visible { display:flex; }
+    .upload-bar-track { height:6px;background:var(--border);border-radius:3px;overflow:hidden; }
+    .upload-bar-fill { height:100%;background:var(--accent);border-radius:3px;transition:width .3s; }
+    .upload-label { font-size:.78rem;color:var(--subtle); }
+
+    .modal-actions { display:flex;gap:10px;justify-content:flex-end; }
+    .btn-cancel { background:none;border:1px solid var(--border);color:var(--subtle);padding:9px 18px;border-radius:8px;font-size:.88rem; }
+    .btn-cancel:hover { border-color:var(--accent);color:var(--accent2); }
+    .btn-primary { background:var(--accent);color:#fff;border:none;padding:9px 22px;border-radius:8px;font-size:.88rem;font-weight:600; }
+    .btn-primary:hover { background:#4f46e5; }
+    .btn-primary:disabled { opacity:.5;cursor:not-allowed; }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>📖 Основи Архітектури Програмного Забезпечення</h1>
-  <span>Mark Richards & Neal Ford • O'Reilly 2020</span>
-</header>
-
-<div id="progress-wrap">
-  <div id="status-dot"></div>
-  <div id="progress-bar-outer">
-    <div id="progress-bar-inner"></div>
+<!-- ── HEADER ── -->
+<div class="header" id="main-header">
+  <div class="header-left">
+    <span style="font-size:1.3rem">📚</span>
+    <span class="header-title" id="header-title">Бібліотека перекладів</span>
   </div>
-  <div id="progress-text">Завантаження...</div>
+  <button class="add-btn" id="header-btn" onclick="openModal()">+ Додати книгу</button>
 </div>
 
-<div class="container">
-  <div id="loading">
-    <div class="spinner"></div>
-    <p>Завантажуємо переклад...</p>
+<!-- ── LIBRARY VIEW ── -->
+<div id="library-view">
+  <div style="max-width:1100px;margin:0 auto;padding:32px 28px">
+    <div class="section-title">Перекладені книги</div>
+    <div class="books-grid" id="books-grid">
+      <div class="empty-state"><div style="font-size:2rem">⏳</div><p>Завантаження...</p></div>
+    </div>
   </div>
-  <div id="content" style="display:none"></div>
+</div>
+
+<!-- ── READER VIEW ── -->
+<div id="reader-view">
+  <div class="reader-progress">
+    <div class="reader-progress-bar"><div class="reader-progress-fill" id="reader-bar"></div></div>
+    <div class="reader-progress-text" id="reader-prog-text">Завантаження...</div>
+  </div>
+  <div class="reader-body">
+    <div class="reader-banner" id="reader-banner">⏳ Переклад ще триває — сторінка оновлюється кожні 15 секунд</div>
+    <div id="reader-content"></div>
+  </div>
 </div>
 
 <button id="scroll-top" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
 
+<!-- ── UPLOAD MODAL ── -->
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event,'modal-overlay')">
+  <div class="modal" style="width:480px">
+    <div class="modal-title">Додати нову книгу</div>
+
+    <div class="file-drop" id="file-drop" onclick="document.getElementById('pdf-input').click()"
+         ondragover="handleDrag(event,true)" ondragleave="handleDrag(event,false)" ondrop="handleDrop(event)">
+      <div style="font-size:2rem">📄</div>
+      <p>Перетягніть PDF або натисніть для вибору</p>
+      <div class="file-name" id="file-name"></div>
+      <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="onFileSelect(this)">
+    </div>
+
+    <div class="field">
+      <label>Назва книги</label>
+      <input type="text" id="book-title" placeholder="напр. Clean Code — Роберт Мартін">
+    </div>
+
+    <div class="field">
+      <label>Пропустити сторінок (titulní, зміст, передмова...)</label>
+      <input type="number" id="from-page" value="1" min="1" max="999">
+    </div>
+
+    <div class="upload-progress" id="upload-progress">
+      <div class="upload-label" id="upload-label">Завантаження...</div>
+      <div class="upload-bar-track"><div class="upload-bar-fill" id="upload-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Скасувати</button>
+      <button class="btn-primary" id="submit-btn" onclick="submitBook()">▶ Перекласти</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOG MODAL ── -->
+<div class="modal-overlay" id="log-overlay" onclick="handleOverlayClick(event,'log-overlay')">
+  <div class="modal" style="width:700px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="modal-title">📋 Журнал перекладу</div>
+      <button onclick="closeLog()" style="background:none;border:none;color:var(--muted);font-size:1.3rem;cursor:pointer">✕</button>
+    </div>
+    <div id="log-book-name" style="font-size:.82rem;color:var(--muted)"></div>
+    <pre id="log-content" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:.73rem;color:#94a3b8;overflow-y:auto;max-height:55vh;white-space:pre-wrap;word-break:break-all;font-family:'JetBrains Mono','Fira Code',monospace;line-height:1.5">Завантаження...</pre>
+    <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">
+      <span id="log-ts" style="font-size:.75rem;color:var(--muted)"></span>
+      <button class="btn-cancel" onclick="refreshLog()">↻ Оновити</button>
+      <button class="btn-cancel" onclick="closeLog()">Закрити</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  let TOTAL_CHUNKS = 321;
-  let autoRefresh = true;
+  const API = '/api';
+  let books = {};
+  let currentBookId = null;
+  let readerTimer = null;
+  let logTimer = null;
+  let logBookId = null;
+  let selectedFile = null;
 
-  // ── Scroll to top button ──
-  window.addEventListener('scroll', () => {
-    document.getElementById('scroll-top').classList.toggle('visible', window.scrollY > 400);
-  });
-
-  // ── Load progress from tiny progress.json ──
-  async function loadProgress() {
-    try {
-      const r = await fetch('/progress.json?t=' + Date.now());
-      if (!r.ok) return null;
-      const d = await r.json();
-      TOTAL_CHUNKS = d.total || TOTAL_CHUNKS;
-      return d.done || 0;
-    } catch { return null; }
+  // ── File drag & drop ───────────────────────────────────────────────────────
+  function handleDrag(e, over) { e.preventDefault(); document.getElementById('file-drop').classList.toggle('dragover', over); }
+  function handleDrop(e) { e.preventDefault(); handleDrag(e,false); const f=e.dataTransfer.files[0]; if(f&&f.name.endsWith('.pdf')) setFile(f); }
+  function onFileSelect(inp) { if(inp.files[0]) setFile(inp.files[0]); }
+  function setFile(f) {
+    selectedFile = f;
+    document.getElementById('file-name').textContent = `✓ ${f.name} (${(f.size/1024/1024).toFixed(1)} MB)`;
+    if (!document.getElementById('book-title').value)
+      document.getElementById('book-title').value = f.name.replace('.pdf','').replace(/_/g,' ').replace(/\s*\(\d+\)\s*$/,'').trim();
   }
 
-  // ── Load markdown content ──
-  async function loadContent() {
-    const r = await fetch('/book_ua.md?t=' + Date.now());
-    if (!r.ok) throw new Error('Файл не знайдено');
-    return r.text();
+  // ── Modals ─────────────────────────────────────────────────────────────────
+  function openModal() { document.getElementById('modal-overlay').classList.add('open'); document.getElementById('submit-btn').disabled=false; document.getElementById('upload-progress').classList.remove('visible'); }
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    ['file-name','book-title'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('from-page').value=1;
+    document.getElementById('pdf-input').value='';
+    selectedFile=null;
+  }
+  function handleOverlayClick(e,id) { if(e.target===e.currentTarget) { if(id==='modal-overlay') closeModal(); else closeLog(); } }
+
+  // ── Submit book ────────────────────────────────────────────────────────────
+  function submitBook() {
+    if (!selectedFile) { alert('Оберіть PDF файл'); return; }
+    const title = document.getElementById('book-title').value.trim();
+    if (!title) { alert('Введіть назву книги'); return; }
+    const fromPage = parseInt(document.getElementById('from-page').value)||1;
+
+    const form = new FormData();
+    form.append('file', selectedFile);
+    form.append('title', title);
+    form.append('from_page', fromPage);
+
+    document.getElementById('submit-btn').disabled = true;
+    document.getElementById('upload-progress').classList.add('visible');
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded/e.total*100);
+        document.getElementById('upload-bar').style.width = pct+'%';
+        document.getElementById('upload-label').textContent = pct>=100 ? 'Запускаємо переклад...' : `Завантаження PDF... ${pct}%`;
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status===200) {
+        document.getElementById('upload-label').textContent = '✓ Переклад запущено!';
+        setTimeout(()=>{ closeModal(); loadBooks(); }, 1000);
+      } else {
+        alert('Помилка: ' + xhr.responseText);
+        document.getElementById('submit-btn').disabled = false;
+      }
+    };
+    xhr.onerror = () => { alert('Помилка мережі'); document.getElementById('submit-btn').disabled=false; };
+    xhr.open('POST', `${API}/books`);
+    xhr.send(form);
   }
 
-  // ── Update UI ──
-  async function update() {
+  // ── Library ────────────────────────────────────────────────────────────────
+  async function loadBooks() {
     try {
-      const [done, md] = await Promise.all([loadProgress(), loadContent()]);
-      const pct = done ? Math.round(done / TOTAL_CHUNKS * 100) : 0;
-      const isDone = pct >= 100;
-
-      // Progress bar
-      document.getElementById('progress-bar-inner').style.width = pct + '%';
-      document.getElementById('progress-text').textContent =
-        isDone
-          ? `✓ Переклад завершено (${TOTAL_CHUNKS}/${TOTAL_CHUNKS} чанків)`
-          : `Перекладено: ${done || 0} / ${TOTAL_CHUNKS} чанків (${pct}%)`;
-
-      const dot = document.getElementById('status-dot');
-      if (isDone) dot.classList.add('done');
-
-      // Content
-      document.getElementById('loading').style.display = 'none';
-      const el = document.getElementById('content');
-      el.style.display = 'block';
-      el.innerHTML = marked.parse(md);
-
-      // Stop auto-refresh when done
-      if (isDone) autoRefresh = false;
-
+      const r = await fetch(`${API}/books`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      books = await r.json();
+      renderLibrary();
     } catch(e) {
-      document.getElementById('loading').innerHTML =
-        `<p style="color:#ef4444">Помилка: ${e.message}</p>`;
+      document.getElementById('books-grid').innerHTML = `
+        <div class="empty-state">
+          <div style="font-size:2rem">⚠️</div>
+          <p style="color:var(--danger)">API недоступний. Запустіть: <code>uvicorn api:app --port 8000</code></p>
+          <button class="btn-cancel" style="margin-top:12px" onclick="loadBooks()">↻ Спробувати знову</button>
+        </div>`;
     }
   }
 
-  // ── Init ──
-  update();
-  setInterval(() => { if (autoRefresh) update(); }, 15000); // refresh every 15s
+  function statusLabel(b) {
+    if (b.status==='running') return '● Перекладається';
+    if (b.status==='done')    return '✓ Завершено';
+    return '○ Очікування';
+  }
+
+  function renderLibrary() {
+    const grid = document.getElementById('books-grid');
+    const entries = Object.entries(books);
+    if (!entries.length) {
+      grid.innerHTML = `<div class="empty-state"><div style="font-size:2.5rem">📖</div><p>Немає книг — натисніть "+ Додати книгу"</p></div>`;
+      return;
+    }
+    grid.innerHTML = entries.map(([id,b]) => {
+      const done=b.done||0, total=b.total||0;
+      const pct = total>0 ? Math.min(Math.round(done/total*100),100) : 0;
+      const date = b.created_at ? new Date(b.created_at).toLocaleDateString('uk') : '';
+      const canRead = done>0;
+      const isDone  = b.status==='done';
+      return `
+        <div class="book-card${b.status==='running'?' running-card':''}">
+          <div>
+            <div class="book-card-title">${b.title}</div>
+            <div class="book-card-meta">${date?`Додано ${date} · `:''}від стор. ${b.from_page||1}</div>
+          </div>
+          <span class="status-badge ${b.status}"><span class="status-dot"></span>${statusLabel(b)}</span>
+          <div class="progress-wrap">
+            <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="progress-label">${total>0?`${done} / ${total} чанків (${pct}%)`:'Очікування...'}</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-read" onclick="openReader('${id}')"${canRead?'':' disabled title="Переклад ще не почався"'}>📖 Читати</button>
+            ${isDone?`
+              <button class="btn-download" id="dl-epub-${id}" onclick="downloadBook('${id}','epub')">⬇ EPUB</button>
+              <button class="btn-download" id="dl-pdf-${id}"  onclick="downloadBook('${id}','pdf')">⬇ PDF</button>
+            `:''}
+            ${b.status==='running'?`<button class="btn-stop" onclick="stopBook('${id}')">⏹ Стоп</button>`:''}
+            ${b.pdf_path&&b.status!=='running'?`<button class="btn-restart" onclick="restartBook('${id}')">↺ Знову</button>`:''}
+            <button class="btn-log" onclick="openLog('${id}')" title="Журнал">📋</button>
+            <button class="btn-delete" onclick="deleteBook('${id}')">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Download ───────────────────────────────────────────────────────────────
+  async function downloadBook(id, fmt) {
+    const btn = document.getElementById(`dl-${fmt}-${id}`);
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳...';
+    try {
+      const resp = await fetch(`${API}/books/${id}/export?format=${fmt}`);
+      if (!resp.ok) {
+        const err = await resp.json().catch(()=>({detail:'Помилка сервера'}));
+        alert(`Помилка: ${err.detail}`);
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(books[id]?.title||id).slice(0,50)}.${fmt}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch(e) { alert('Помилка: '+e.message); }
+    finally { btn.disabled=false; btn.textContent=orig; }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  async function deleteBook(id) {
+    const running = books[id]?.status === 'running';
+    const msg = running
+      ? `Зупинити переклад і видалити "${books[id]?.title}"?\nВсі файли буде видалено назавжди.`
+      : `Видалити "${books[id]?.title}"?\nФайли буде видалено назавжди.`;
+    if (!confirm(msg)) return;
+    try {
+      const r = await fetch(`${API}/books/${id}`,{method:'DELETE'});
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await loadBooks();
+    } catch(e) { alert('Помилка видалення: '+e.message); }
+  }
+
+  // ── Stop ───────────────────────────────────────────────────────────────────
+  async function stopBook(id) {
+    if (!confirm(`Зупинити переклад "${books[id]?.title}"?\nПрогрес збережено — можна перезапустити пізніше.`)) return;
+    try {
+      const r = await fetch(`${API}/books/${id}/stop`,{method:'POST'});
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await loadBooks();
+    } catch(e) { alert('Помилка зупинки: '+e.message); }
+  }
+
+  // ── Restart ────────────────────────────────────────────────────────────────
+  async function restartBook(id) {
+    if (!confirm(`Почати переклад "${books[id]?.title}" заново?\nВесь попередній прогрес буде скинуто.`)) return;
+    try {
+      const r = await fetch(`${API}/books/${id}/restart`,{method:'POST'});
+      if (!r.ok) {
+        const err = await r.json().catch(()=>({detail:'Помилка сервера'}));
+        alert(`Помилка: ${err.detail}`); return;
+      }
+      await loadBooks();
+    } catch(e) { alert('Помилка перезапуску: '+e.message); }
+  }
+
+  // ── Reader ─────────────────────────────────────────────────────────────────
+  async function openReader(id) {
+    currentBookId = id;
+    document.getElementById('library-view').style.display = 'none';
+    document.getElementById('reader-view').style.display = 'block';
+    document.getElementById('header-title').textContent = books[id]?.title || id;
+    document.getElementById('header-btn').textContent = '+ Додати книгу';
+    document.getElementById('header-btn').onclick = ()=>{showLibrary();setTimeout(openModal,100);};
+
+    if (!document.getElementById('back-btn-el')) {
+      const bb = document.createElement('button');
+      bb.className='back-btn'; bb.id='back-btn-el'; bb.textContent='← Бібліотека';
+      bb.onclick=showLibrary;
+      document.getElementById('main-header').querySelector('.header-left').prepend(bb);
+    }
+
+    window.scrollTo(0,0);
+    await updateReader();
+    if (readerTimer) clearInterval(readerTimer);
+    readerTimer = setInterval(updateReader, 15000);
+  }
+
+  async function updateReader() {
+    const book = books[currentBookId];
+    if (!book) return;
+    const prefix = book.url_prefix;
+    try {
+      const [pr, mr] = await Promise.all([
+        fetch(`${prefix}/progress.json?t=`+Date.now()),
+        fetch(`${prefix}/book_ua.md?t=`+Date.now()),
+      ]);
+      if (pr.ok) {
+        const p = await pr.json();
+        const done=p.done||0, total=p.total||1;
+        const pct = Math.min(Math.round(done/total*100),100);
+        document.getElementById('reader-bar').style.width = pct+'%';
+        document.getElementById('reader-prog-text').textContent = pct>=100
+          ? `✓ Переклад завершено (${total} чанків)`
+          : `${done} / ${total} чанків (${pct}%)`;
+        document.getElementById('reader-banner').style.display = pct<100?'block':'none';
+        books[currentBookId] = {...book, done, total, status:pct>=100?'done':'running'};
+      }
+      if (mr.ok) {
+        let md = await mr.text();
+        md = md.replace(/!\[([^\]]*)\]\(images\//g, `![$1](${prefix}/images/`);
+        document.getElementById('reader-content').innerHTML = marked.parse(md);
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  function showLibrary() {
+    if (readerTimer) { clearInterval(readerTimer); readerTimer=null; }
+    currentBookId=null;
+    document.getElementById('library-view').style.display='block';
+    document.getElementById('reader-view').style.display='none';
+    document.getElementById('header-title').textContent='Бібліотека перекладів';
+    document.getElementById('header-btn').textContent='+ Додати книгу';
+    document.getElementById('header-btn').onclick=openModal;
+    document.getElementById('back-btn-el')?.remove();
+    loadBooks();
+  }
+
+  // ── Log ────────────────────────────────────────────────────────────────────
+  async function openLog(id) {
+    logBookId=id;
+    document.getElementById('log-overlay').classList.add('open');
+    document.getElementById('log-book-name').textContent = books[id]?.title||id;
+    document.getElementById('log-content').textContent='Завантаження...';
+    document.getElementById('log-ts').textContent='';
+    await refreshLog();
+    if (logTimer) clearInterval(logTimer);
+    if (books[id]?.status==='running') logTimer=setInterval(refreshLog,8000);
+  }
+
+  async function refreshLog() {
+    if (!logBookId) return;
+    document.getElementById('log-ts').textContent='Оновлення...';
+    try {
+      const r = await fetch(`${API}/books/${logBookId}/log`);
+      if (!r.ok) { document.getElementById('log-ts').textContent='Помилка API'; return; }
+      const d = await r.json();
+      const pre = document.getElementById('log-content');
+      pre.textContent = d.log||'(порожній журнал)';
+      pre.scrollTop = pre.scrollHeight;
+      document.getElementById('log-ts').textContent=`Оновлено ${new Date().toLocaleTimeString('uk')}`;
+    } catch(e) { document.getElementById('log-ts').textContent='Помилка мережі'; }
+  }
+
+  function closeLog() {
+    document.getElementById('log-overlay').classList.remove('open');
+    if (logTimer){clearInterval(logTimer);logTimer=null;}
+    logBookId=null;
+  }
+
+  // ── Scroll to top ──────────────────────────────────────────────────────────
+  window.addEventListener('scroll',()=>{
+    document.getElementById('scroll-top').classList.toggle('visible',window.scrollY>400);
+  });
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  loadBooks();
+  setInterval(()=>{ if(!currentBookId) loadBooks(); }, 15000);
 </script>
 </body>
 </html>

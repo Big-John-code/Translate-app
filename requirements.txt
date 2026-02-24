@@ -1,4 +1,10 @@
-anthropic>=0.40.0
-pymupdf>=1.24.0
+PyMuPDF>=1.24.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+starlette>=0.40.0
+python-multipart>=0.0.12
+mlx>=0.18.0
+mlx-lm>=0.18.0
+weasyprint>=62.0
 tqdm>=4.66.0
 python-dotenv>=1.0.0

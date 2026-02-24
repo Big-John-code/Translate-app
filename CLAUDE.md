@@ -2,89 +2,94 @@
 
 ## Що це за проект
 
-Локальний перекладач PDF-книг EN→UA на базі Ollama (aya-expanse:8b).
-Перекладає "Fundamentals of Software Architecture" безкоштовно, без інтернету.
+Локальний перекладач PDF-книг EN→UA на базі MLX (Apple Silicon) або Ollama.
+Два режими: **CLI** (`main.py`) і **Веб-інтерфейс** (FastAPI + Docker nginx).
 
 ## Ключові файли
 
 | Файл | Роль |
 |------|------|
-| `main.py` | CLI точка входу. Команди: `translate`, `info`, `glossary` |
-| `extractor.py` | PDF→блоки тексту + PNG зображень. Використовує PyMuPDF (fitz) |
-| `translator.py` | Ollama HTTP API, checkpoint, `_strip_noise`, `_fix_english_terms`, `_neural_fix_terms` |
-| `glossary.py` | `KEEP_AS_IS` (терміни що не перекладаються) + `TECH_GLOSSARY` (77 термінів EN→UA) |
-| `postprocess.py` | Post-processing: перший вжиток терміна → `"термін (term)"` |
-| `docker-compose.yml` | Nginx на порту 3000, сервить `output/book_ua.md` + `progress.json` + `images/` |
+| `api.py` | FastAPI бекенд (port 8000). CRUD книг, stop/restart, export EPUB/PDF, log |
+| `main.py` | CLI: команди `translate`, `info`, `glossary`, `export` |
+| `extractor.py` | PDF→блоки тексту + PNG зображень. PyMuPDF (fitz) |
+| `translator.py` | MLX/Ollama, checkpoint, code-block preservation, `_fix_english_terms` |
+| `glossary.py` | `KEEP_AS_IS` + `TECH_GLOSSARY` (77 термінів EN→UA) |
+| `postprocess.py` | Перший вжиток терміна → `"термін (term)"` |
+| `registry.json` | Реєстр книг для веб-UI: title, output_dir, url_prefix, pid, pdf_path |
+| `docker-compose.yml` | Nginx port 3000; монтує `output/`, `output_react/`, `books/` |
+| `docker/nginx.conf` | `/api/` → host:8000, `/data/` → alias /data/ |
+| `docker/index.html` | SPA: бібліотека + рідер + upload/stop/restart/delete/export |
 
-## Архітектура перекладу
+## Архітектура
 
 ```
-PDF → extract_blocks() → blocks_to_chunks() → translate_chunk() → _write_output()
-                                                      ↓
-                                           [optional] _neural_fix_terms()
-                                                      ↓
-                                            _save_checkpoint()  →  progress.json
-```
+Web UI upload → POST /api/books → subprocess(main.py translate) → progress.json
+                                                                  ↓
+                                              GET /api/books — читає progress.json + pid_alive()
 
-Після кожного чанку: зберігається checkpoint + пишеться в `output/book_ua.md` через `os.fsync()`.
+CLI: PDF → extract_blocks() → blocks_to_chunks() → translate_chunk() → _write_output()
+                                    ↓ code блоки витягуються до LLM, відновлюються після
+                                    ↓ _save_checkpoint() → progress.json
+```
 
 ## Важливі технічні деталі
 
+### Бекенди
+- **mlx** (за замовч.) — `mlx-community/aya-expanse-8b-4bit`, Apple Silicon native, ~5–10 с/чанк
+- **ollama** — `aya-expanse:8b`, потребує `brew install ollama && ollama pull aya-expanse:8b`
+
+### Code-block preservation
+`_extract_code_blocks()` / `_restore_code_blocks()` — плейсхолдер `«CODE_BLOCK_N»`
+перед відправкою до LLM і відновлення після. Chunks що містять тільки код — пропускаються.
+
 ### Docker / macOS VirtioFS
-- **Ніколи не видаляти** `output/book_ua.md` і `progress.json` — Docker Desktop на macOS кешує inode bind-mount
-- Щоб скинути: `echo "" > output/book_ua.md` (перезаписати, не видаляти)
+- **Ніколи не видаляти** файли що монтуються в Docker — тільки перезаписувати
 - `_write_output()` використовує `os.fsync()` щоб VirtioFS одразу бачило зміни
 - Якщо Docker не бачить зміни: `docker compose restart viewer`
 
 ### Checkpoint
-- `.checkpoint.json` — повний стан: `{"chunks": {"0": "...", "1": "..."}, "last_chunk": 2}`
-- `progress.json` — легкий файл для UI: `{"done": 3, "total": 321}`
-- `--resume` читає checkpoint і продовжує з `last_chunk + 1`
+- `.checkpoint.json` — `{"chunks": {"0": "...", "1": "..."}, "last_chunk": 2}`
+- `progress.json` — `{"done": 3, "total": 321}` тільки для UI
+- `--resume` продовжує з `last_chunk + 1`
 
-### Моделі
-- **aya-expanse:8b** — поточна модель, найкраща для украïнської, ~40с/чанк
-- **qwen2.5:14b** — якість вища але "витікає" китайськими символами (проблема тренування)
-- `_strip_noise()` — видаляє CJK блоки регексом якщо модель їх генерує
+### Структура книг
+- **Нові книги** (завантажені через UI): `books/{id}/book.pdf` + `books/{id}/output/`
+- **Легасі** (arch, react): `output/` і `output_react/` — без `pdf_path`, restart недоступний
 
-### Терміни що залишаються англійськими
-- system prompt явно перераховує: `software architect`, `API`, `Docker`...
-- `_fix_english_terms()` — regex post-process для відомих патернів (напр. `архітектор програмного забезпечення` → `software architect`)
-- `--neural-fix` — другий Ollama виклик порівнює оригінал і переклад, виправляє будь-які технічні терміни автоматично (~2x повільніше)
-
-### Зображення
-- Extracted через `page.get_pixmap(clip=fitz.Rect(bbox))` при DPI=150
-- Зберігаються в `output/images/p{page:04d}_img{n:02d}.png`
-- В Markdown вставляються як `![...](images/filename.png)` після відповідного чанку
+### API — ключові ендпоінти
+- `GET /api/books` — список + статус (running/done/idle)
+- `POST /api/books` — upload PDF, запуск перекладу
+- `DELETE /api/books/{id}` — SIGTERM→SIGKILL + видалення файлів
+- `POST /api/books/{id}/stop` — SIGTERM→SIGKILL, зберігає файли
+- `POST /api/books/{id}/restart` — скидає checkpoint/output, перезапускає
+- `GET /api/books/{id}/export?format=epub|pdf` — pandoc + WeasyPrint
 
 ## Типові команди
 
 ```bash
-# Запуск перекладу в фоні
+# Запустити API сервер
+.venv/bin/uvicorn api:app --host 0.0.0.0 --port 8000
+
+# Запустити Docker (веб-переглядач)
+docker compose up -d
+docker compose restart viewer  # якщо не бачить оновлень
+
+# CLI переклад
 nohup .venv/bin/python main.py translate \
-  --input ../fundamentalsofsoftwarearchitecture.pdf \
-  --output output/book_ua.md \
-  --from-page 21 --chunk-words 400 --glossary --neural-fix \
+  --input book.pdf --output output/book_ua.md \
+  --from-page 21 --chunk-words 400 --backend mlx --title "Назва" \
   > output/translation.log 2>&1 &
 
-# Стежити за прогресом
-tail -f output/translation.log
-cat progress.json
-
-# Зупинити
+# Зупинити переклад
 pkill -f "main.py translate"
 
-# Скинути і почати заново
-echo '{"chunks":{},"last_chunk":-1}' > .checkpoint.json
-echo "" > output/book_ua.md
-echo '{"done":0,"total":321}' > progress.json
-
-# Docker
-docker compose up -d        # запустити переглядач
-docker compose restart viewer  # якщо не бачить оновлень
+# Перевірити прогрес
+tail -f output/translation.log
+cat output/progress.json
 ```
 
 ## Що не чіпати
 
-- `output/book_ua.md` і `progress.json` — не видаляти, тільки перезаписувати
 - `.venv/` — virtualenv з усіма залежностями
-- `output/images/` — PNG з PDF, заново генерується тільки при повному рестарті
+- `registry.json` — реєстр книг (редагувати тільки через API)
+- Файли в `output/` і `output_react/` — не видаляти (Docker кешує inode)

@@ -68,16 +68,17 @@ def cmd_translate(args: argparse.Namespace) -> None:
 
     # Step 3: Translate
     print("Крок 2/2 — Перекладаємо...")
-    translator = Translator(checkpoint_path=".checkpoint.json", backend=args.backend)
+    checkpoint_file = args.checkpoint or (output_path.parent / ".checkpoint.json")
+    translator = Translator(checkpoint_path=str(checkpoint_file), backend=args.backend)
 
     if not args.resume:
         translator.clear_checkpoint()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    book_title = args.title or Path(pdf_path).stem.replace("_", " ")
     glossary_header = (
-        f"# Основи архітектури програмного забезпечення\n"
-        f"*Марк Річардс та Ніл Форд — Fundamentals of Software Architecture (O'Reilly, 2020)*\n\n"
+        f"# {book_title}\n\n"
         f"> Переклад: сторінки {start_page}–{end_page} з {total_pages}\n\n"
         f"---\n\n"
     )
@@ -236,6 +237,8 @@ def main() -> None:
     p_tr.add_argument("--glossary", action="store_true", help="Зберегти окремий глосарій")
     p_tr.add_argument("--neural-fix", action="store_true", help="Нейронне виправлення термінів після перекладу (повільніше, але точніше)")
     p_tr.add_argument("--backend", default="mlx", choices=["mlx", "ollama"], help="Бекенд: mlx (швидше, Apple Silicon) або ollama (за замовч.: mlx)")
+    p_tr.add_argument("--checkpoint", default=None, help="Шлях до файлу checkpoint (за замовч.: <output_dir>/.checkpoint.json)")
+    p_tr.add_argument("--title", default=None, help="Назва книги для заголовку перекладу")
 
     # --- info ---
     p_info = sub.add_parser("info", help="Інформація про PDF")

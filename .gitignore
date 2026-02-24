@@ -1,21 +1,41 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 .env
 
-# Translation state (large, machine-generated)
-.checkpoint.json
-progress.json
-output/
+# ── Translation output (generated, large, personal) ───────────────────────────
+# Все всередині output/ та output_react/ — ігнорується, але самі папки зберігаються
+output/*
+!output/.gitkeep
+output_react/*
+!output_react/.gitkeep
 
-# IDE
+# Завантажені книги та їх переклади (через веб-UI)
+books/*
+!books/.gitkeep
+
+# ── Checkpoint & progress files ───────────────────────────────────────────────
+.checkpoint*.json
+progress*.json
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+
+# ── Personal book registry (auto-created on first use) ────────────────────────
+# Копіюй registry.example.json → registry.json щоб стартувати з порожньою бібліотекою
+registry.json
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 .vscode/
+*.iml
 
-# macOS
+# ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
+.AppleDouble
+.LSOverride
 
-# Claude Code
+# ── Claude Code ───────────────────────────────────────────────────────────────
 .claude/
