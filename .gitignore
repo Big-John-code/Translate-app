@@ -6,15 +6,13 @@ __pycache__/
 .env
 
 # ── Translation output (generated, large, personal) ───────────────────────────
-# Все всередині output/ та output_react/ — ігнорується, але самі папки зберігаються
-output/*
-!output/.gitkeep
-output_react/*
-!output_react/.gitkeep
-
 # Завантажені книги та їх переклади (через веб-UI)
 books/*
 !books/.gitkeep
+
+# Legacy dirs (якщо залишились локально після міграції)
+output/
+output_react/
 
 # ── Checkpoint & progress files ───────────────────────────────────────────────
 .checkpoint*.json

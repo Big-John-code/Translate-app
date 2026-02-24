@@ -4,8 +4,6 @@ services:
     ports:
       - "3000:80"
     volumes:
-      - ./output:/data/output:ro
-      - ./output_react:/data/output_react:ro
       - ./books:/data/books:ro
     restart: unless-stopped
     extra_hosts:
