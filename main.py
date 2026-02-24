@@ -21,7 +21,7 @@ load_dotenv()
 
 
 def cmd_translate(args: argparse.Namespace) -> None:
-    from extractor import extract_blocks, blocks_to_chunks, chunk_to_text, chunk_images, get_total_pages
+    from extractor import extract_blocks, blocks_to_chunks, chunk_to_text, chunk_image_positions, get_total_pages
     from translator import Translator
     from glossary import build_glossary_note
 
@@ -62,7 +62,7 @@ def cmd_translate(args: argparse.Namespace) -> None:
     # Step 2: Group into chunks
     chunks = list(blocks_to_chunks(iter(blocks), max_words=args.chunk_words))
     chunks_text = [chunk_to_text(c) for c in chunks]
-    chunks_imgs = [chunk_images(c) for c in chunks]
+    chunks_imgs = [chunk_image_positions(c) for c in chunks]
     print(f"  Чанків для перекладу: {len(chunks)}")
     print()
 
@@ -177,7 +177,7 @@ def cmd_export(args: argparse.Namespace) -> None:
     out = Path(args.output) if args.output else src.with_suffix(f".{fmt}")
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = ["pandoc", str(src), "-o", str(out)]
+    cmd = ["pandoc", str(src), "-o", str(out), "--resource-path", str(src.parent)]
 
     if fmt == "epub":
         cmd += [

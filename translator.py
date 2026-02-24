@@ -305,6 +305,47 @@ def _write_output(path: Path, results: list[str], up_to: int) -> None:
         os.fsync(f.fileno())
 
 
+# ── Image interleaving ────────────────────────────────────────────────────────
+
+def _interleave_images(translated: str, image_positions: list[tuple[float, str]]) -> str:
+    """
+    Insert images at their approximate positions within the translated text
+    instead of appending all of them at the end.
+    image_positions: list of (position_fraction 0.0-1.0, image_markdown)
+    """
+    if not image_positions:
+        return translated
+
+    paragraphs = translated.split('\n\n')
+    non_empty = [i for i, p in enumerate(paragraphs) if p.strip()]
+    n = len(non_empty)
+
+    if n == 0:
+        imgs = "\n\n".join(img for _, img in image_positions)
+        return translated + ("\n\n" + imgs if imgs else "")
+
+    m = len(image_positions)
+    insertions: dict[int, list[str]] = {}
+
+    for img_idx, (frac, img_md) in enumerate(image_positions):
+        if m <= n:
+            # Few images: use source fractional position
+            ne_idx = min(int(frac * n), n - 1)
+        else:
+            # More images than paragraphs: spread evenly to avoid bunching
+            ne_idx = int(img_idx * n / m)
+        para_idx = non_empty[ne_idx]
+        insertions.setdefault(para_idx, []).append(img_md)
+
+    result = []
+    for i, para in enumerate(paragraphs):
+        result.append(para)
+        for img_md in insertions.get(i, []):
+            result.append(img_md)
+
+    return '\n\n'.join(result)
+
+
 # ── Main translator class ─────────────────────────────────────────────────────
 
 class Translator:
@@ -363,7 +404,7 @@ class Translator:
         chunks_text: list[str],
         output_path: str,
         resume: bool = True,
-        chunks_imgs: list[list[str]] | None = None,
+        chunks_imgs: list[list[tuple[float, str]]] | None = None,
         neural_fix: bool = False,
     ) -> str:
         state = _load_checkpoint(self.checkpoint_path) if resume else {"chunks": {}, "last_chunk": -1}
@@ -395,8 +436,7 @@ class Translator:
                 elapsed = time.time() - t0
 
                 if chunks_imgs and i < len(chunks_imgs) and chunks_imgs[i]:
-                    imgs_md = "\n\n".join(chunks_imgs[i])
-                    translated = translated + "\n\n" + imgs_md
+                    translated = _interleave_images(translated, chunks_imgs[i])
 
                 results[i] = translated
                 prev_context = translated

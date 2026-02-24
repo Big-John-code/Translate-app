@@ -223,6 +223,27 @@ def chunk_images(chunk: list[Block]) -> list[str]:
     return [b.text for b in chunk if b.kind == "image"]
 
 
+def chunk_image_positions(chunk: list[Block]) -> list[tuple[float, str]]:
+    """
+    Return list of (position_fraction, image_md) for each image in the chunk.
+    position_fraction is 0.0–1.0: where in the text-block sequence this image appears.
+    Used to interleave images at the correct position inside the translated text.
+    """
+    text_blocks = [b for b in chunk if b.kind != "image"]
+    total_text = len(text_blocks)
+    if total_text == 0:
+        return [(1.0, b.text) for b in chunk if b.kind == "image"]
+
+    text_idx = 0
+    result: list[tuple[float, str]] = []
+    for block in chunk:
+        if block.kind == "image":
+            result.append((text_idx / total_text, block.text))
+        else:
+            text_idx += 1
+    return result
+
+
 def get_total_pages(pdf_path: str) -> int:
     doc = fitz.open(pdf_path)
     n = len(doc)
